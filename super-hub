@@ -1,268 +1,216 @@
--- احذف السكربت القديم تماماً وضع هذا بدله
+-- احذف السكربت السابق بالكامل وضع هذا
 local env = (getgenv and getgenv()) or _G
-if env.UNSTABLE_SMP_HUB and type(env.UNSTABLE_SMP_HUB.destroy) == "function" then
-    pcall(env.UNSTABLE_SMP_HUB.destroy)
+if env.VOXEL_WARS_UI and type(env.VOXEL_WARS_UI.destroy) == "function" then
+    pcall(env.VOXEL_WARS_UI.destroy)
 end
 
 local Players = game:GetService("Players")
-local UIS = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local plr = Players.LocalPlayer
 local playerGui = plr:WaitForChild("PlayerGui")
 
--- ============ HUB UI ============
-local hubGui = Instance.new("ScreenGui")
-hubGui.Name = "UNSTABLE_SMP_HUB"
-hubGui.ResetOnSpawn = false
-hubGui.IgnoreGuiInset = true
-hubGui.DisplayOrder = 999999
-hubGui.Parent = playerGui
+-- ============ GUI ============
+local gui = Instance.new("ScreenGui")
+gui.Name = "VOXEL_WARS_UI"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.DisplayOrder = 999999
+gui.Parent = playerGui
 
+-- الإطار الرئيسي (مستطيل كبير، غير قابل للسحب)
 local frame = Instance.new("Frame")
-frame.Size = UDim2.fromOffset(300, 220)
-frame.Position = UDim2.new(0.5, -150, 0.5, -110)
+frame.Size = UDim2.fromOffset(420, 340)
+frame.Position = UDim2.new(0.5, -210, 0.5, -170)
 frame.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
 frame.BorderSizePixel = 0
 frame.Active = true
-frame.Parent = hubGui
-Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
-local fstroke = Instance.new("UIStroke")
-fstroke.Color = Color3.fromRGB(60, 60, 78)
-fstroke.Thickness = 1
-fstroke.Parent = frame
+frame.Parent = gui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+local fs = Instance.new("UIStroke")
+fs.Color = Color3.fromRGB(60, 60, 78)
+fs.Thickness = 1
+fs.Parent = frame
+
+-- Header
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, 52)
+header.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
+header.BorderSizePixel = 0
+header.Parent = frame
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 12)
+local hFix = Instance.new("Frame")
+hFix.Size = UDim2.new(1, 0, 0, 12)
+hFix.Position = UDim2.new(0, 0, 1, -12)
+hFix.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
+hFix.BorderSizePixel = 0
+hFix.Parent = header
+local accLine = Instance.new("Frame")
+accLine.Size = UDim2.new(1, 0, 0, 2)
+accLine.Position = UDim2.new(0, 0, 1, -2)
+accLine.BorderSizePixel = 0
+accLine.Parent = header
+local ag = Instance.new("UIGradient")
+ag.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(139, 92, 246)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(59, 130, 246))
+}
+ag.Parent = accLine
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 45)
+title.Size = UDim2.new(1, -70, 1, 0)
+title.Position = UDim2.fromOffset(18, 0)
 title.BackgroundTransparency = 1
-title.Text = "Unstable SMP Hub"
+title.Text = "Voxel Wars"
 title.Font = Enum.Font.GothamBold
 title.TextSize = 17
 title.TextColor3 = Color3.fromRGB(245, 245, 250)
-title.Parent = frame
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = header
 
--- زر Run Unstablesmp
+-- زر X
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.fromOffset(32, 32)
+closeBtn.Position = UDim2.new(1, -42, 0, 10)
+closeBtn.BackgroundColor3 = Color3.fromRGB(48, 24, 28)
+closeBtn.Text = "✕"
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 15
+closeBtn.TextColor3 = Color3.fromRGB(239, 68, 68)
+closeBtn.AutoButtonColor = false
+closeBtn.Parent = header
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 7)
+
+-- محتوى
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, -36, 1, -70)
+content.Position = UDim2.fromOffset(18, 60)
+content.BackgroundTransparency = 1
+content.Parent = frame
+local lay = Instance.new("UIListLayout")
+lay.Padding = UDim.new(0, 12)
+lay.Parent = content
+
+-- ============ زر Run ============
 local runBtn = Instance.new("TextButton")
-runBtn.Size = UDim2.new(1, -40, 0, 46)
-runBtn.Position = UDim2.new(0, 20, 0, 55)
+runBtn.Size = UDim2.new(1, 0, 0, 56)
 runBtn.BackgroundColor3 = Color3.fromRGB(139, 92, 246)
-runBtn.Text = "Run Unstablesmp"
+runBtn.Text = "▶  Run"
 runBtn.Font = Enum.Font.GothamBold
-runBtn.TextSize = 14
+runBtn.TextSize = 16
 runBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 runBtn.AutoButtonColor = false
-runBtn.Parent = frame
-Instance.new("UICorner", runBtn).CornerRadius = UDim.new(0, 8)
+runBtn.Parent = content
+Instance.new("UICorner", runBtn).CornerRadius = UDim.new(0, 10)
+local rs = Instance.new("UIStroke")
+rs.Color = Color3.fromRGB(167, 139, 250)
+rs.Thickness = 1.5
+rs.Parent = runBtn
 
--- زر Beta For Help
-local betaBtn = Instance.new("TextButton")
-betaBtn.Size = UDim2.new(1, -40, 0, 46)
-betaBtn.Position = UDim2.new(0, 20, 0, 112)
-betaBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
-betaBtn.Text = "Beta For Help"
-betaBtn.Font = Enum.Font.GothamBold
-betaBtn.TextSize = 14
-betaBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-betaBtn.AutoButtonColor = false
-betaBtn.Parent = frame
-Instance.new("UICorner", betaBtn).CornerRadius = UDim.new(0, 8)
-
--- Label "Soon"
-local soonLabel = Instance.new("TextLabel")
-soonLabel.Size = UDim2.new(1, -40, 0, 22)
-soonLabel.Position = UDim2.new(0, 20, 0, 165)
-soonLabel.BackgroundTransparency = 1
-soonLabel.Text = ""
-soonLabel.Font = Enum.Font.GothamBold
-soonLabel.TextSize = 13
-soonLabel.TextColor3 = Color3.fromRGB(245, 158, 11)
-soonLabel.Parent = frame
-
--- سحب البانل
-local dragHeader = Instance.new("TextButton")
-dragHeader.Size = UDim2.new(1, 0, 0, 45)
-dragHeader.BackgroundTransparency = 1
-dragHeader.Text = ""
-dragHeader.Parent = frame
-
-local dragging, dragStart, startPos = false, nil, nil
-dragHeader.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = frame.Position
-    end
-end)
-UIS.InputChanged:Connect(function(input)
-    if not dragging then return end
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        local d = input.Position - dragStart
-        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
-    end
-end)
-UIS.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
-    end
-end)
-
--- زر Run Unstablesmp → يظهر Soon
 runBtn.MouseButton1Click:Connect(function()
-    soonLabel.Text = "Soon..."
-    task.delay(2, function()
-        if soonLabel and soonLabel.Parent then
-            soonLabel.Text = ""
-        end
+    local ok, err = pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/myheisenberg/Voxel-Wars/main/loader.luau"))()
     end)
+    if not ok then
+        warn("[Voxel Wars] " .. tostring(err))
+    end
 end)
 
--- ============ BETA SCRIPT ============
-local betaGui, betaConnections = nil, {}
-local betaActive = false
-local lastAttack = 0
+-- ============ زر Steal An Egg ============
+local eggBtn = Instance.new("TextButton")
+eggBtn.Size = UDim2.new(1, 0, 0, 56)
+eggBtn.BackgroundColor3 = Color3.fromRGB(34, 40, 56)
+eggBtn.Text = "Steal An Egg   •   Soon"
+eggBtn.Font = Enum.Font.GothamBold
+eggBtn.TextSize = 15
+eggBtn.TextColor3 = Color3.fromRGB(148, 148, 165)
+eggBtn.AutoButtonColor = false
+eggBtn.Parent = content
+Instance.new("UICorner", eggBtn).CornerRadius = UDim.new(0, 10)
+local es = Instance.new("UIStroke")
+es.Color = Color3.fromRGB(72, 80, 100)
+es.Thickness = 1.5
+es.Parent = eggBtn
 
-betaBtn.MouseButton1Click:Connect(function()
-    -- احذف واجهة الـ Hub
-    hubGui:Destroy()
+-- علامة ✔ (mark) على الزر
+local mark = Instance.new("TextLabel")
+mark.Size = UDim2.fromOffset(24, 24)
+mark.Position = UDim2.new(1, -32, 0.5, -12)
+mark.BackgroundTransparency = 1
+mark.Text = "✓"
+mark.Font = Enum.Font.GothamBold
+mark.TextSize = 20
+mark.TextColor3 = Color3.fromRGB(34, 197, 94)
+mark.Parent = eggBtn
 
-    -- جيب الموديولات
-    local MC = plr.PlayerScripts:WaitForChild("MC", 10)
-    if not MC then return end
-    local okN, Net = pcall(require, MC:WaitForChild("Net")); if not okN then return end
-    local okH, Hands = pcall(require, MC:WaitForChild("Hands")); if not okH then return end
-    local okC, Controller = pcall(require, MC:WaitForChild("Controller")); if not okC then return end
-    local okW, World = pcall(require, MC:WaitForChild("World")); if not okW then return end
+-- تعطيل الزر (Soon)
+eggBtn.MouseButton1Click:Connect(function() end)
 
-    -- واجهة الزر العائم
-    betaGui = Instance.new("ScreenGui")
-    betaGui.Name = "UNSTABLE_SMP_BETA"
-    betaGui.ResetOnSpawn = false
-    betaGui.IgnoreGuiInset = true
-    betaGui.DisplayOrder = 1000000
-    betaGui.Parent = playerGui
+-- ============ تأكيد الخروج ============
+local confirm = Instance.new("Frame")
+confirm.Size = UDim2.fromOffset(280, 150)
+confirm.Position = UDim2.new(0.5, -140, 0.5, -75)
+confirm.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+confirm.BorderSizePixel = 0
+confirm.Visible = false
+confirm.ZIndex = 10
+confirm.Parent = gui
+Instance.new("UICorner", confirm).CornerRadius = UDim.new(0, 12)
+local cs = Instance.new("UIStroke")
+cs.Color = Color3.fromRGB(239, 68, 68)
+cs.Thickness = 2
+cs.Parent = confirm
 
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.fromOffset(70, 70)
-    btn.Position = UDim2.new(1, -90, 0.5, -35)
-    btn.BackgroundColor3 = Color3.fromRGB(239, 68, 68)
-    btn.Text = "KA\nOFF"
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 13
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.AutoButtonColor = false
-    btn.Active = true
-    btn.Parent = betaGui
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 12)
-    local bstroke = Instance.new("UIStroke")
-    bstroke.Color = Color3.fromRGB(255, 140, 140)
-    bstroke.Thickness = 2
-    bstroke.Parent = btn
+local cTitle = Instance.new("TextLabel")
+cTitle.Size = UDim2.new(1, 0, 0, 55)
+cTitle.BackgroundTransparency = 1
+cTitle.Text = "Sure Exit ?"
+cTitle.Font = Enum.Font.GothamBold
+cTitle.TextSize = 18
+cTitle.TextColor3 = Color3.fromRGB(245, 245, 250)
+cTitle.ZIndex = 11
+cTitle.Parent = confirm
 
-    -- دعم السحب + التمييز بين الضغط والسحب
-    local bDragging, bMoved, bDragStart, bStartPos = false, false, nil, nil
-    table.insert(betaConnections, btn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            bDragging = true
-            bMoved = false
-            bDragStart = input.Position
-            bStartPos = btn.Position
-        end
-    end))
-    table.insert(betaConnections, UIS.InputChanged:Connect(function(input)
-        if not bDragging then return end
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            local d = input.Position - bDragStart
-            if d.Magnitude > 6 then bMoved = true end
-            btn.Position = UDim2.new(bStartPos.X.Scale, bStartPos.X.Offset + d.X, bStartPos.Y.Scale, bStartPos.Y.Offset + d.Y)
-        end
-    end))
-    table.insert(betaConnections, UIS.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            if bDragging and not bMoved then
-                -- toggle
-                betaActive = not betaActive
-                if betaActive then
-                    btn.Text = "KA\nON"
-                    btn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
-                    bstroke.Color = Color3.fromRGB(140, 255, 160)
-                else
-                    btn.Text = "KA\nOFF"
-                    btn.BackgroundColor3 = Color3.fromRGB(239, 68, 68)
-                    bstroke.Color = Color3.fromRGB(255, 140, 140)
-                end
-            end
-            bDragging = false
-        end
-    end))
+local denyBtn = Instance.new("TextButton")
+denyBtn.Size = UDim2.new(0.5, -30, 0, 46)
+denyBtn.Position = UDim2.new(0, 20, 1, -66)
+denyBtn.BackgroundColor3 = Color3.fromRGB(48, 48, 60)
+denyBtn.Text = "Deny"
+denyBtn.Font = Enum.Font.GothamBold
+denyBtn.TextSize = 14
+denyBtn.TextColor3 = Color3.fromRGB(245, 245, 250)
+denyBtn.AutoButtonColor = false
+denyBtn.ZIndex = 11
+denyBtn.Parent = confirm
+Instance.new("UICorner", denyBtn).CornerRadius = UDim.new(0, 8)
 
-    -- Crit only دائماً مفعّل
-    local function canCrit()
-        local s = Controller.state
-        if not s then return false end
-        if (s.fallDistance or 0) <= 0 then return false end
-        if s.onGround or s.inWater or s.sprinting or s.gliding or s.flying then return false end
-        return true
-    end
+local exitBtn = Instance.new("TextButton")
+exitBtn.Size = UDim2.new(0.5, -30, 0, 46)
+exitBtn.Position = UDim2.new(0.5, 10, 1, -66)
+exitBtn.BackgroundColor3 = Color3.fromRGB(239, 68, 68)
+exitBtn.Text = "Exit"
+exitBtn.Font = Enum.Font.GothamBold
+exitBtn.TextSize = 14
+exitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+exitBtn.AutoButtonColor = false
+exitBtn.ZIndex = 11
+exitBtn.Parent = confirm
+Instance.new("UICorner", exitBtn).CornerRadius = UDim.new(0, 8)
 
-    local function snapshot(look)
-        local s = Controller.state
-        if not s or not s.pos then return nil end
-        return {
-            fall = s.fallDistance or 0, ground = s.onGround == true,
-            sprint = s.sprinting == true, water = s.inWater == true,
-            gliding = s.gliding == true, vel = s.vel or Vector3.new(),
-            look = look, swap = false, pos = s.pos, predicted = true
-        }
-    end
+closeBtn.MouseButton1Click:Connect(function()
+    confirm.Visible = true
+end)
 
-    -- Killaura كل ثانية
-    table.insert(betaConnections, RunService.Heartbeat:Connect(function()
-        if not betaActive then return end
-        if Controller.locked or workspace:GetAttribute("JugHold") == true then return end
+denyBtn.MouseButton1Click:Connect(function()
+    confirm.Visible = false
+end)
 
-        local c = plr.Character
-        if not c or c:GetAttribute("Alive") ~= true then return end
-        local okM, mode = pcall(Hands.gamemode); if okM and mode == "spectator" then return end
-        local okS, str = pcall(Hands.strength); if not okS or str < 0.95 then return end
-
-        -- Crit only دائماً
-        if not canCrit() then return end
-
-        -- كل ثانية
-        local now = os.clock()
-        if now - lastAttack < 1 then return end
-
-        local eye = Controller.eye()
-        if not eye then return end
-        local ok, targets = pcall(World.targets)
-        if not ok or type(targets) ~= "table" then return end
-
-        local best, bd
-        for _, t in ipairs(targets) do
-            local ctr = t.feet + Vector3.new(0, (t.height or 1.8) * 0.5, 0)
-            local d = (ctr - eye).Magnitude
-            if d <= 4 and (not bd or d < bd) then best, bd = t, d end
-        end
-        if not best then return end
-
-        local aim = best.feet + Vector3.new(0, (best.height or 1.8) * 0.6, 0) - eye
-        if aim.Magnitude < 0.0001 then return end
-        local st = snapshot(aim.Unit)
-        if not st then return end
-
-        if pcall(Net.send, { a = "attack", target = best.id, st = st }) then
-            Hands.attackReset = Controller.tickCount
-            Hands.swing = now
-            lastAttack = now
-        end
-    end))
+exitBtn.MouseButton1Click:Connect(function()
+    pcall(function() gui:Destroy() end)
+    if env.VOXEL_WARS_UI then env.VOXEL_WARS_UI = nil end
 end)
 
 -- ============ API ============
-env.UNSTABLE_SMP_HUB = {
+env.VOXEL_WARS_UI = {
     destroy = function()
-        for _, c in ipairs(betaConnections) do pcall(function() c:Disconnect() end) end
-        betaConnections = {}
-        if hubGui then pcall(function() hubGui:Destroy() end) end
-        if betaGui then pcall(function() betaGui:Destroy() end) end
+        pcall(function() gui:Destroy() end)
     end
 }
