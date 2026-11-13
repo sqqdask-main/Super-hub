@@ -1,1048 +1,268 @@
+-- احذف السكربت القديم تماماً وضع هذا بدله
 local env = (getgenv and getgenv()) or _G
-local old = env.UNSTABLE_SMP
-if old and type(old) == "table" and type(old.destroy) == "function" then
-    pcall(old.destroy)
+if env.UNSTABLE_SMP_HUB and type(env.UNSTABLE_SMP_HUB.destroy) == "function" then
+    pcall(env.UNSTABLE_SMP_HUB.destroy)
 end
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local plr = Players.LocalPlayer
 local playerGui = plr:WaitForChild("PlayerGui")
-local MC = plr.PlayerScripts:WaitForChild("MC")
-local Net = require(MC:WaitForChild("Net"))
-local Hands = require(MC:WaitForChild("Hands"))
-local Controller = require(MC:WaitForChild("Controller"))
-local World = require(MC:WaitForChild("World"))
 
-local TOTEM_ID, PEARL_ID, WIND_ID, MACE_ID = "totem_of_undying", "ender_pearl", "wind_charge", "mace"
+-- ============ HUB UI ============
+local hubGui = Instance.new("ScreenGui")
+hubGui.Name = "UNSTABLE_SMP_HUB"
+hubGui.ResetOnSpawn = false
+hubGui.IgnoreGuiInset = true
+hubGui.DisplayOrder = 999999
+hubGui.Parent = playerGui
 
-local CFG = {
-    killaura = true, killauraV2 = false, autoMace = false, autoFarm = false,
-    autoTotem = true, camLock = true, esp = true, critOnly = true,
-    pearlButton = true, windButton = true, maceButton = true,
-    pearlLock = false, panelLock = false,
-    range = 3.5, maceRange = 3.5, farmRange = 30,
-    totemHealth = 8, camSmooth = 8, pearlDelay = 0.25
-}
-env.UNSTABLE_SMP_CFG = CFG
-
-local T = {
-    bg           = Color3.fromRGB(16, 16, 22),
-    bgElevated   = Color3.fromRGB(24, 24, 32),
-    bgInput      = Color3.fromRGB(34, 34, 44),
-    accent       = Color3.fromRGB(139, 92, 246),
-    accentGlow   = Color3.fromRGB(167, 139, 250),
-    success      = Color3.fromRGB(34, 197, 94),
-    danger       = Color3.fromRGB(239, 68, 68),
-    warning      = Color3.fromRGB(245, 158, 11),
-    info         = Color3.fromRGB(59, 130, 246),
-    text         = Color3.fromRGB(245, 245, 250),
-    textDim      = Color3.fromRGB(148, 148, 165),
-    stroke       = Color3.fromRGB(48, 48, 62)
-}
-
--- ================= STATE =================
-local toggleButtons, valueLabels = {}, {}
-local maceOriginalSlot, farmOriginalSlot = nil, nil
-local maceHasThrown, maceThrowTime = false, 0
-local farmState, farmStepStart = "idle", 0
-local connections, destroyed = {}, false
-local totemBusy, pearlBusy, windBusy = false, false, false
-local pearlTrack, pearlCapture = nil, nil
-local lastAttack, lastV2Attack, lastMaceAttack, lastFarmAttack, lastStatus = 0,0,0,0,0
-local camTarget, espElements = nil, {}
-local CAMERA_BIND, ESP_BIND = "UNSTABLE_SMP_CAMERA", "UNSTABLE_SMP_ESP"
-local pearlCatch, windLaunch, autoMace, autoFarm, refresh
-local pearlButton, windButton, maceButton, pearlStroke, windStroke, maceStroke
-local status
-
--- ================= GUIS =================
-local gui = Instance.new("ScreenGui")
-gui.Name, gui.ResetOnSpawn, gui.IgnoreGuiInset = "UNSTABLE_SMP", false, true
-gui.DisplayOrder, gui.ZIndexBehavior = 999999, Enum.ZIndexBehavior.Sibling
-gui.Parent = playerGui
-
-local espGui = Instance.new("ScreenGui")
-espGui.Name, espGui.ResetOnSpawn, espGui.IgnoreGuiInset = "UNSTABLE_SMP_ESP", false, true
-espGui.DisplayOrder, espGui.ZIndexBehavior = 999998, Enum.ZIndexBehavior.Sibling
-espGui.Parent = playerGui
-
-local pearlGui = Instance.new("ScreenGui")
-pearlGui.Name, pearlGui.ResetOnSpawn, pearlGui.IgnoreGuiInset = "UNSTABLE_SMP_PEARL", false, true
-pearlGui.DisplayOrder, pearlGui.ZIndexBehavior = 1000000, Enum.ZIndexBehavior.Sibling
-pearlGui.Parent = playerGui
-
--- ================= NOTIFICATIONS =================
-local notifFrame = Instance.new("Frame")
-notifFrame.Size = UDim2.new(0, 260, 0, 240)
-notifFrame.Position = UDim2.new(1, -280, 0, 20)
-notifFrame.BackgroundTransparency = 1
-notifFrame.Parent = gui
-local notifLayout = Instance.new("UIListLayout")
-notifLayout.Padding = UDim.new(0, 6)
-notifLayout.Parent = notifFrame
-
-local function notify(text, color, duration)
-    color = color or T.accent
-    duration = duration or 2
-    local toast = Instance.new("TextLabel")
-    toast.Size = UDim2.new(1, 0, 0, 32)
-    toast.BackgroundColor3 = T.bgElevated
-    toast.Text = "  ●  " .. text
-    toast.Font = Enum.Font.GothamMedium
-    toast.TextSize = 12
-    toast.TextColor3 = T.text
-    toast.TextXAlignment = Enum.TextXAlignment.Left
-    toast.Position = UDim2.new(1, 20, 0, 0)
-    toast.Parent = notifFrame
-    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = toast
-    local s = Instance.new("UIStroke"); s.Color = color; s.Thickness = 1.5; s.Parent = toast
-    TweenService:Create(toast, TweenInfo.new(0.25), { Position = UDim2.new(0, 0, 0, 0) }):Play()
-    task.delay(duration, function()
-        if toast.Parent then
-            TweenService:Create(toast, TweenInfo.new(0.25), { Position = UDim2.new(1, 20, 0, 0), BackgroundTransparency = 1 }):Play()
-            task.wait(0.3)
-            if toast.Parent then toast:Destroy() end
-        end
-    end)
-end
-
--- ================= MAIN FRAME =================
 local frame = Instance.new("Frame")
-frame.Name, frame.Size = "Main", UDim2.fromOffset(300, 500)
-frame.Position = UDim2.new(0, 20, 0, 60)
-frame.BackgroundColor3 = T.bg
+frame.Size = UDim2.fromOffset(300, 220)
+frame.Position = UDim2.new(0.5, -150, 0.5, -110)
+frame.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
 frame.BorderSizePixel = 0
 frame.Active = true
-frame.ClipsDescendants = true
-frame.Parent = gui
-local frameCorner = Instance.new("UICorner"); frameCorner.CornerRadius = UDim.new(0, 10); frameCorner.Parent = frame
-local frameStroke = Instance.new("UIStroke"); frameStroke.Color = T.stroke; frameStroke.Thickness = 1; frameStroke.Parent = frame
-
--- Header
-local header = Instance.new("Frame")
-header.Size = UDim2.new(1, 0, 0, 44)
-header.BackgroundColor3 = T.bgElevated
-header.BorderSizePixel = 0
-header.Parent = frame
-local hc = Instance.new("UICorner"); hc.CornerRadius = UDim.new(0, 10); hc.Parent = header
-local hFix = Instance.new("Frame"); hFix.Size = UDim2.new(1, 0, 0, 10); hFix.Position = UDim2.new(0, 0, 1, -10); hFix.BackgroundColor3 = T.bgElevated; hFix.BorderSizePixel = 0; hFix.Parent = header
-local accentLine = Instance.new("Frame")
-accentLine.Size = UDim2.new(1, 0, 0, 2)
-accentLine.Position = UDim2.new(0, 0, 1, -2)
-accentLine.BorderSizePixel = 0
-accentLine.Parent = header
-local ag = Instance.new("UIGradient")
-ag.Color = ColorSequence.new{ ColorSequenceKeypoint.new(0, T.accent), ColorSequenceKeypoint.new(1, T.info) }
-ag.Parent = accentLine
-
-local dot = Instance.new("Frame")
-dot.Size = UDim2.fromOffset(8, 8)
-dot.Position = UDim2.fromOffset(14, 18)
-dot.BackgroundColor3 = T.accent
-dot.BorderSizePixel = 0
-dot.Parent = header
-Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+frame.Parent = hubGui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
+local fstroke = Instance.new("UIStroke")
+fstroke.Color = Color3.fromRGB(60, 60, 78)
+fstroke.Thickness = 1
+fstroke.Parent = frame
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -80, 1, 0)
-title.Position = UDim2.fromOffset(28, 0)
+title.Size = UDim2.new(1, 0, 0, 45)
 title.BackgroundTransparency = 1
-title.Text = "UNSTABLE SMP"
+title.Text = "Unstable SMP Hub"
 title.Font = Enum.Font.GothamBold
-title.TextSize = 13
-title.TextColor3 = T.text
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = header
+title.TextSize = 17
+title.TextColor3 = Color3.fromRGB(245, 245, 250)
+title.Parent = frame
 
-local headerDrag = Instance.new("TextButton")
-headerDrag.Size = UDim2.new(1, -40, 1, 0)
-headerDrag.BackgroundTransparency = 1
-headerDrag.Text = ""
-headerDrag.Parent = header
+-- زر Run Unstablesmp
+local runBtn = Instance.new("TextButton")
+runBtn.Size = UDim2.new(1, -40, 0, 46)
+runBtn.Position = UDim2.new(0, 20, 0, 55)
+runBtn.BackgroundColor3 = Color3.fromRGB(139, 92, 246)
+runBtn.Text = "Run Unstablesmp"
+runBtn.Font = Enum.Font.GothamBold
+runBtn.TextSize = 14
+runBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+runBtn.AutoButtonColor = false
+runBtn.Parent = frame
+Instance.new("UICorner", runBtn).CornerRadius = UDim.new(0, 8)
 
-local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.fromOffset(28, 28)
-closeBtn.Position = UDim2.new(1, -34, 0, 8)
-closeBtn.BackgroundColor3 = Color3.fromRGB(40, 20, 24)
-closeBtn.Text = "✕"
-closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 14
-closeBtn.TextColor3 = T.danger
-closeBtn.AutoButtonColor = false
-closeBtn.Parent = header
-Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
-closeBtn.MouseButton1Click:Connect(function()
-    frame.Visible = false
-    notify("Panel hidden", T.info, 1.2)
-end)
+-- زر Beta For Help
+local betaBtn = Instance.new("TextButton")
+betaBtn.Size = UDim2.new(1, -40, 0, 46)
+betaBtn.Position = UDim2.new(0, 20, 0, 112)
+betaBtn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
+betaBtn.Text = "Beta For Help"
+betaBtn.Font = Enum.Font.GothamBold
+betaBtn.TextSize = 14
+betaBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+betaBtn.AutoButtonColor = false
+betaBtn.Parent = frame
+Instance.new("UICorner", betaBtn).CornerRadius = UDim.new(0, 8)
 
--- Tabs
-local tabsBar = Instance.new("Frame")
-tabsBar.Size = UDim2.new(1, -20, 0, 34)
-tabsBar.Position = UDim2.fromOffset(10, 50)
-tabsBar.BackgroundTransparency = 1
-tabsBar.Parent = frame
-local tl = Instance.new("UIListLayout")
-tl.FillDirection = Enum.FillDirection.Horizontal
-tl.Padding = UDim.new(0, 4)
-tl.Parent = tabsBar
+-- Label "Soon"
+local soonLabel = Instance.new("TextLabel")
+soonLabel.Size = UDim2.new(1, -40, 0, 22)
+soonLabel.Position = UDim2.new(0, 20, 0, 165)
+soonLabel.BackgroundTransparency = 1
+soonLabel.Text = ""
+soonLabel.Font = Enum.Font.GothamBold
+soonLabel.TextSize = 13
+soonLabel.TextColor3 = Color3.fromRGB(245, 158, 11)
+soonLabel.Parent = frame
 
-local tabButtons = {}
-local contentFrames = {}
-local activeTab = "Combat"
+-- سحب البانل
+local dragHeader = Instance.new("TextButton")
+dragHeader.Size = UDim2.new(1, 0, 0, 45)
+dragHeader.BackgroundTransparency = 1
+dragHeader.Text = ""
+dragHeader.Parent = frame
 
-local function makeTab(name)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1/3, -3, 1, 0)
-    btn.BackgroundColor3 = (name == "Combat") and T.bgInput or T.bgElevated
-    btn.Text = name
-    btn.Font = Enum.Font.GothamSemibold
-    btn.TextSize = 11
-    btn.TextColor3 = (name == "Combat") and T.text or T.textDim
-    btn.AutoButtonColor = false
-    btn.Parent = tabsBar
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-    local ind = Instance.new("Frame")
-    ind.Size = UDim2.new(0.5, 0, 0, 2)
-    ind.Position = UDim2.new(0.25, 0, 1, -3)
-    ind.BackgroundColor3 = T.accent
-    ind.BorderSizePixel = 0
-    ind.Visible = (name == "Combat")
-    ind.Parent = btn
-    Instance.new("UICorner", ind).CornerRadius = UDim.new(1, 0)
-    tabButtons[name] = { btn = btn, ind = ind }
-    btn.MouseButton1Click:Connect(function()
-        activeTab = name
-        for n, d in pairs(tabButtons) do
-            local act = n == name
-            d.btn.BackgroundColor3 = act and T.bgInput or T.bgElevated
-            d.btn.TextColor3 = act and T.text or T.textDim
-            d.ind.Visible = act
-            contentFrames[n].Visible = act
-        end
-    end)
-end
-
-local contentRoot = Instance.new("Frame")
-contentRoot.Size = UDim2.new(1, 0, 0, 388)
-contentRoot.Position = UDim2.fromOffset(0, 88)
-contentRoot.BackgroundTransparency = 1
-contentRoot.Parent = frame
-
-for _, name in ipairs({"Combat", "Visuals", "Config"}) do
-    local cf = Instance.new("Frame")
-    cf.Size = UDim2.new(1, 0, 1, 0)
-    cf.BackgroundTransparency = 1
-    cf.Visible = (name == "Combat")
-    cf.Parent = contentRoot
-    local lay = Instance.new("UIListLayout"); lay.Padding = UDim.new(0, 4); lay.Parent = cf
-    local pd = Instance.new("UIPadding")
-    pd.PaddingLeft = UDim.new(0, 12); pd.PaddingRight = UDim.new(0, 12)
-    pd.PaddingTop = UDim.new(0, 8); pd.PaddingBottom = UDim.new(0, 8)
-    pd.Parent = cf
-    contentFrames[name] = cf
-end
-
-makeTab("Combat"); makeTab("Visuals"); makeTab("Config")
-
--- ================= TOGGLE / SLIDER =================
-local function makeToggle(parent, key, labelText)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 32)
-    row.BackgroundTransparency = 1
-    row.Parent = parent
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -50, 1, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = labelText
-    lbl.Font = Enum.Font.GothamMedium
-    lbl.TextSize = 12
-    lbl.TextColor3 = T.text
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Parent = row
-    local sb = Instance.new("Frame")
-    sb.Size = UDim2.fromOffset(38, 20)
-    sb.Position = UDim2.new(1, -38, 0.5, -10)
-    sb.BackgroundColor3 = T.bgInput
-    sb.BorderSizePixel = 0
-    sb.Parent = row
-    Instance.new("UICorner", sb).CornerRadius = UDim.new(1, 0)
-    local knob = Instance.new("Frame")
-    knob.Size = UDim2.fromOffset(16, 16)
-    knob.Position = UDim2.fromOffset(2, 2)
-    knob.BackgroundColor3 = T.textDim
-    knob.BorderSizePixel = 0
-    knob.Parent = sb
-    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-    local hit = Instance.new("TextButton")
-    hit.Size = UDim2.new(1, 0, 1, 0)
-    hit.BackgroundTransparency = 1
-    hit.Text = ""
-    hit.Parent = row
-    hit.MouseButton1Click:Connect(function()
-        CFG[key] = not CFG[key]
-        if key == "autoMace" then
-            if CFG[key] then maceOriginalSlot = Hands.inv and Hands.inv.selected
-            else
-                if maceOriginalSlot then pcall(Hands.select, maceOriginalSlot); maceOriginalSlot = nil end
-                maceHasThrown = false
-            end
-        elseif key == "autoFarm" then
-            if CFG[key] then farmOriginalSlot = Hands.inv and Hands.inv.selected
-            else
-                if farmOriginalSlot then pcall(Hands.select, farmOriginalSlot); farmOriginalSlot = nil end
-                farmState = "idle"
-            end
-        end
-        refresh()
-    end)
-    toggleButtons[key] = { lbl = lbl, sb = sb, knob = knob }
-end
-
-local function makeSlider(parent, key, labelText, min, max, step, format)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 44)
-    row.BackgroundTransparency = 1
-    row.Parent = parent
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -60, 0, 16)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = labelText
-    lbl.Font = Enum.Font.GothamMedium
-    lbl.TextSize = 11
-    lbl.TextColor3 = T.text
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Parent = row
-    local val = Instance.new("TextLabel")
-    val.Size = UDim2.fromOffset(60, 16)
-    val.Position = UDim2.new(1, -60, 0, 0)
-    val.BackgroundTransparency = 1
-    val.Text = format:format(CFG[key])
-    val.Font = Enum.Font.Code
-    val.TextSize = 11
-    val.TextColor3 = T.accentGlow
-    val.TextXAlignment = Enum.TextXAlignment.Right
-    val.Parent = row
-    local track = Instance.new("Frame")
-    track.Size = UDim2.new(1, 0, 0, 6)
-    track.Position = UDim2.fromOffset(0, 26)
-    track.BackgroundColor3 = T.bgInput
-    track.BorderSizePixel = 0
-    track.Parent = row
-    Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
-    local ratio = (CFG[key] - min) / (max - min)
-    local fill = Instance.new("Frame")
-    fill.Size = UDim2.new(ratio, 0, 1, 0)
-    fill.BackgroundColor3 = T.accent
-    fill.BorderSizePixel = 0
-    fill.Parent = track
-    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-    local knob = Instance.new("Frame")
-    knob.Size = UDim2.fromOffset(14, 14)
-    knob.Position = UDim2.new(ratio, -7, 0.5, -7)
-    knob.BackgroundColor3 = T.text
-    knob.BorderSizePixel = 0
-    knob.Parent = track
-    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-    local hit = Instance.new("TextButton")
-    hit.Size = UDim2.new(1, 0, 1, 0)
-    hit.BackgroundTransparency = 1
-    hit.Text = ""
-    hit.Parent = row
-    local dragging = false
-    local function setFromX(x)
-        local absX, w = track.AbsolutePosition.X, track.AbsoluteSize.X
-        local r = math.clamp((x - absX) / w, 0, 1)
-        local raw = min + r * (max - min)
-        local stepped = math.floor(raw / step + 0.5) * step
-        CFG[key] = math.clamp(stepped, min, max)
-        val.Text = format:format(CFG[key])
-        local nr = (CFG[key] - min) / (max - min)
-        fill.Size = UDim2.new(nr, 0, 1, 0)
-        knob.Position = UDim2.new(nr, -7, 0.5, -7)
-    end
-    hit.InputBegan:Connect(function(io)
-        if io.UserInputType == Enum.UserInputType.MouseButton1 or io.UserInputType == Enum.UserInputType.Touch then
-            dragging = true; setFromX(io.Position.X)
-        end
-    end)
-    UIS.InputChanged:Connect(function(io)
-        if dragging and (io.UserInputType == Enum.UserInputType.MouseMovement or io.UserInputType == Enum.UserInputType.Touch) then
-            setFromX(io.Position.X)
-        end
-    end)
-    UIS.InputEnded:Connect(function(io)
-        if io.UserInputType == Enum.UserInputType.MouseButton1 or io.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
-    end)
-    valueLabels[key] = { lbl = val, format = format, fill = fill, knob = knob, min = min, max = max }
-end
-
--- ================= BUILD TABS =================
-makeToggle(contentFrames["Combat"], "killaura", "Killaura")
-makeToggle(contentFrames["Combat"], "killauraV2", "Kill V2")
-makeToggle(contentFrames["Combat"], "autoMace", "Auto Mace")
-makeToggle(contentFrames["Combat"], "autoFarm", "Auto Farm")
-makeToggle(contentFrames["Combat"], "critOnly", "Crit Only")
-makeToggle(contentFrames["Combat"], "autoTotem", "Auto Totem")
-makeSlider(contentFrames["Combat"], "range", "Attack Range", 1, 6, 0.5, "%.1f")
-makeSlider(contentFrames["Combat"], "maceRange", "Mace Range", 1, 6, 0.5, "%.1f")
-makeSlider(contentFrames["Combat"], "totemHealth", "Totem HP", 1, 20, 1, "%d")
-
-makeToggle(contentFrames["Visuals"], "esp", "ESP")
-makeToggle(contentFrames["Visuals"], "camLock", "Camera Lock")
-makeSlider(contentFrames["Visuals"], "camSmooth", "Camera Smooth", 1, 20, 1, "%d")
-
-makeToggle(contentFrames["Config"], "pearlButton", "Pearl Button")
-makeToggle(contentFrames["Config"], "windButton", "Wind Button")
-makeToggle(contentFrames["Config"], "maceButton", "Mace Button")
-makeToggle(contentFrames["Config"], "pearlLock", "Lock Floating")
-makeToggle(contentFrames["Config"], "panelLock", "Lock Panel")
-makeSlider(contentFrames["Config"], "pearlDelay", "Pearl Delay", 0.05, 1, 0.05, "%.2f")
-
--- ================= STATUS BAR =================
-status = Instance.new("TextLabel")
-status.Size = UDim2.new(1, -24, 0, 24)
-status.Position = UDim2.new(0, 12, 1, -34)
-status.BackgroundColor3 = T.bgElevated
-status.BorderSizePixel = 0
-status.Text = "HP ? | Off ? | T: 0"
-status.Font = Enum.Font.Code
-status.TextSize = 11
-status.TextColor3 = T.textDim
-status.TextXAlignment = Enum.TextXAlignment.Left
-status.Parent = frame
-Instance.new("UICorner", status).CornerRadius = UDim.new(0, 5)
-local sp = Instance.new("UIPadding"); sp.PaddingLeft = UDim.new(0, 8); sp.Parent = status
-
--- ================= REFRESH =================
-refresh = function()
-    for key, d in pairs(toggleButtons) do
-        local on = CFG[key] == true
-        TweenService:Create(d.sb, TweenInfo.new(0.15), {
-            BackgroundColor3 = on and T.accent or T.bgInput
-        }):Play()
-        TweenService:Create(d.knob, TweenInfo.new(0.15), {
-            Position = on and UDim2.fromOffset(20, 2) or UDim2.fromOffset(2, 2),
-            BackgroundColor3 = on and T.text or T.textDim
-        }):Play()
-        d.lbl.TextColor3 = on and T.text or T.textDim
-    end
-    for key, d in pairs(valueLabels) do
-        d.lbl.Text = d.format:format(CFG[key])
-        local r = (CFG[key] - d.min) / (d.max - d.min)
-        d.fill.Size = UDim2.new(r, 0, 1, 0)
-        d.knob.Position = UDim2.new(r, -7, 0.5, -7)
-    end
-    if pearlButton then
-        pearlButton.Visible = CFG.pearlButton == true
-        windButton.Visible = CFG.windButton == true
-        maceButton.Visible = CFG.maceButton == true
-        pearlButton.Text = CFG.pearlLock and "🔒\nPEARL" or "PEARL"
-        pearlStroke.Color = CFG.pearlLock and T.warning or Color3.fromRGB(120, 220, 150)
-        windStroke.Color = CFG.pearlLock and T.warning or Color3.fromRGB(140, 200, 255)
-        maceButton.Text = CFG.autoMace and "MACE\nON" or "MACE"
-        maceButton.BackgroundColor3 = CFG.autoMace and Color3.fromRGB(180, 100, 50) or Color3.fromRGB(140, 78, 46)
-        maceStroke.Color = CFG.autoMace and Color3.fromRGB(255, 230, 100) or Color3.fromRGB(255, 180, 100)
-    end
-end
-refresh()
-
--- ================= FLOATING BUTTONS =================
-local function makeFloat(name, label, color, strokeColor, y)
-    local btn = Instance.new("TextButton")
-    btn.Name, btn.Size = name, UDim2.fromOffset(58, 58)
-    btn.Position = UDim2.new(1, -66, 0, y)
-    btn.BackgroundColor3 = color
-    btn.AutoButtonColor = false
-    btn.Text = label
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 11
-    btn.TextColor3 = T.text
-    btn.Parent = pearlGui
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 9)
-    local s = Instance.new("UIStroke"); s.Color = strokeColor; s.Thickness = 1.5; s.Parent = btn
-    return btn, s
-end
-pearlButton, pearlStroke = makeFloat("PearlCatch", "PEARL", Color3.fromRGB(42, 112, 74), Color3.fromRGB(120, 220, 150), 200)
-windButton,  windStroke  = makeFloat("WindLaunch", "WIND",  Color3.fromRGB(46, 74, 132), Color3.fromRGB(140, 200, 255), 266)
-maceButton,  maceStroke  = makeFloat("AutoMace",   "MACE",  Color3.fromRGB(140, 78, 46), Color3.fromRGB(255, 180, 100), 332)
-
--- Mini toggle
-local miniBtn = Instance.new("TextButton")
-miniBtn.Size = UDim2.fromOffset(44, 44)
-miniBtn.Position = UDim2.new(1, -54, 0, 10)
-miniBtn.BackgroundColor3 = T.accent
-miniBtn.AutoButtonColor = false
-miniBtn.Text = "SMP"
-miniBtn.Font = Enum.Font.GothamBold
-miniBtn.TextSize = 11
-miniBtn.TextColor3 = T.text
-miniBtn.Parent = gui
-Instance.new("UICorner", miniBtn).CornerRadius = UDim.new(0, 8)
-local ms = Instance.new("UIStroke"); ms.Color = T.accentGlow; ms.Thickness = 1.5; ms.Parent = miniBtn
-miniBtn.MouseButton1Click:Connect(function()
-    frame.Visible = not frame.Visible
-end)
-
--- ================= GAME LOGIC (تمامًا كما في السكربت الأصلي) =================
-local function entityId() local c = plr.Character; return c and c:GetAttribute("EntityId") or nil end
-local function pearlModelPos(pid)
-    local f = workspace:FindFirstChild("MCWorld"); f = f and f:FindFirstChild("Projectiles")
-    local m = f and pid and f:FindFirstChild("Proj" .. tostring(pid))
-    return m and m.PrimaryPart and m.PrimaryPart.Position or nil
-end
-
-Net.on("proj", function(data)
-    if destroyed then return end
-    if data.kind == "pearl" and tostring(data.owner) == tostring(entityId()) then
-        pearlCapture = data.pid
-        pearlTrack = { pid = data.pid, pos = data.pos, vel = data.vel, g = data.g or 0, drag = data.drag or 1 }
-    end
-end)
-Net.on("projSync", function(data)
-    if destroyed or not pearlTrack or data.pid ~= pearlTrack.pid then return end
-    pearlTrack.pos = data.pos; pearlTrack.vel = data.vel
-    pearlTrack.g = data.g or pearlTrack.g; pearlTrack.drag = data.drag or pearlTrack.drag
-end)
-Net.on("projEnd", function(data) if pearlTrack and data.pid == pearlTrack.pid then pearlTrack = nil end end)
-
-local function track(c) connections[#connections+1] = c; return c end
-
-local function snapshot(look)
-    local s = Controller.state
-    if not s or not s.pos then return nil end
-    return {
-        fall = s.fallDistance or 0, ground = s.onGround == true,
-        sprint = s.sprinting == true, water = s.inWater == true,
-        gliding = s.gliding == true, vel = s.vel or Vector3.new(),
-        look = look, swap = false, pos = s.pos, predicted = true
-    }
-end
-
-local function bestTarget(override)
-    local range = override or CFG.range
-    local eye = Controller.eye(); if not eye then return nil end
-    local ok, targets = pcall(World.targets); if not ok or type(targets) ~= "table" then return nil end
-    local best, bd = nil, nil
-    for _, t in ipairs(targets) do
-        local c = t.feet + Vector3.new(0, (t.height or 1.8) * 0.5, 0)
-        local d = (c - eye).Magnitude
-        if d <= range and (not bd or d < bd) then best, bd = t, d end
-    end
-    return best, eye
-end
-
-local function nearestTarget(maxR)
-    local eye = Controller.eye(); if not eye then return nil end
-    local ok, targets = pcall(World.targets); if not ok or type(targets) ~= "table" then return nil end
-    local best, bd = nil, nil
-    for _, t in ipairs(targets) do
-        local d = (t.feet - eye).Magnitude
-        if d <= maxR and (not bd or d < bd) then best, bd = t, d end
-    end
-    return best, bd
-end
-
-local function moveToward(targetPos)
-    local s = Controller.state; if not s or not s.pos then return end
-    local d = Vector3.new(targetPos.X - s.pos.X, 0, targetPos.Z - s.pos.Z)
-    if d.Magnitude < 0.3 then return end
-    local dir = d.Unit
-    if type(Controller.setMoveDir) == "function" then pcall(Controller.setMoveDir, dir); return end
-    if type(Controller.move) == "function" then pcall(Controller.move, dir, true); return end
-    if Controller.moveX ~= nil and Controller.moveZ ~= nil then
-        local c, si = math.cos(Controller.yaw or 0), math.sin(Controller.yaw or 0)
-        Controller.moveX = dir.X * c - dir.Z * si
-        Controller.moveZ = dir.X * si + dir.Z * c
-        return
-    end
-    local char = plr.Character
-    if char then
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum then pcall(hum.MoveTo, hum, targetPos); return end
-    end
-    pcall(Net.send, { a = "move", x = dir.X, z = dir.Z, sprint = true })
-end
-
-local function updateCameraTarget()
-    if not CFG.camLock or Controller.locked then camTarget = nil; return end
-    camTarget = bestTarget()
-end
-
-local function aimCamera(dt)
-    if destroyed or not CFG.camLock or not camTarget then return end
-    if Controller.locked or Controller.frozen then return end
-    local eye = Controller.eye(); if not eye then return end
-    local t = camTarget
-    local d = t.feet + Vector3.new(0, (t.height or 1.8) * 0.6, 0) - eye
-    if d.Magnitude < 0.0001 then return end
-    local dYaw = math.atan2(-d.X, -d.Z)
-    local dPitch = math.atan2(d.Y, math.sqrt(d.X*d.X + d.Z*d.Z))
-    local smooth = math.clamp(CFG.camSmooth or 8, 1, 20)
-    local alpha = 1 - math.exp(-(dt or (1/60)) * (21 - smooth) * 1.2)
-    local diff = (dYaw - Controller.yaw + math.pi) % (2*math.pi) - math.pi
-    Controller.yaw = (Controller.yaw + diff * alpha + math.pi) % (2*math.pi) - math.pi
-    Controller.pitch = Controller.pitch + (dPitch - Controller.pitch) * alpha
-    Controller.pitch = math.clamp(Controller.pitch, -math.pi/2, math.pi/2)
-end
-
-local function canCrit()
-    if not CFG.critOnly then return true end
-    local s = Controller.state; if not s then return false end
-    if (s.fallDistance or 0) <= 0 then return false end
-    if s.onGround == true or s.inWater == true or s.sprinting == true or s.gliding == true or s.flying == true then return false end
-    return true
-end
-
--- ESP
-local function hideEsp(e) e.box.Visible=false; e.name.Visible=false; e.healthBg.Visible=false; e.healthFill.Visible=false end
-local function makeEspElement(id)
-    local box = Instance.new("Frame")
-    box.Name = "ESP_"..tostring(id)
-    box.BackgroundColor3 = Color3.fromRGB(40,0,0); box.BackgroundTransparency = 0.88
-    box.BorderSizePixel = 0; box.Visible = false; box.Parent = espGui
-    local st = Instance.new("UIStroke"); st.Color = Color3.fromRGB(255,80,80); st.Thickness = 1.5; st.Parent = box
-    local nm = Instance.new("TextLabel")
-    nm.BackgroundTransparency = 1; nm.Font = Enum.Font.Code; nm.TextSize = 12
-    nm.TextColor3 = T.text; nm.TextStrokeTransparency = 0.2
-    nm.TextXAlignment = Enum.TextXAlignment.Center; nm.TextYAlignment = Enum.TextYAlignment.Bottom
-    nm.Visible = false; nm.Parent = espGui
-    local hb = Instance.new("Frame")
-    hb.BackgroundColor3 = Color3.fromRGB(12,12,12); hb.BorderSizePixel = 0; hb.Visible = false; hb.Parent = espGui
-    local hf = Instance.new("Frame")
-    hf.AnchorPoint = Vector2.new(0,1); hf.Position = UDim2.new(0,0,1,0); hf.Size = UDim2.new(1,0,1,0)
-    hf.BackgroundColor3 = Color3.fromRGB(80,220,100); hf.BorderSizePixel = 0; hf.Visible = false; hf.Parent = hb
-    espElements[id] = { box=box, stroke=st, name=nm, healthBg=hb, healthFill=hf }
-    return espElements[id]
-end
-
-local function updateEsp()
-    if destroyed then return end
-    if not CFG.esp then
-        for _, e in pairs(espElements) do hideEsp(e) end
-        return
-    end
-    local cam = workspace.CurrentCamera; if not cam then return end
-    local ok, targets = pcall(World.targets)
-    if not ok or type(targets) ~= "table" then for _,e in pairs(espElements) do hideEsp(e) end; return end
-    local eye = Controller.eye(); local seen = {}
-    for _, t in ipairs(targets) do
-        local m = t.model
-        if m and m.Parent and t.id ~= nil then
-            local okB, bounds, size = pcall(function() return m:GetBoundingBox() end)
-            if okB and bounds and size then
-                local top = bounds.Position + Vector3.new(0, size.Y*0.5, 0)
-                local bot = bounds.Position - Vector3.new(0, size.Y*0.5, 0)
-                local ts, bs = cam:WorldToViewportPoint(top), cam:WorldToViewportPoint(bot)
-                if ts.Z > 0 and bs.Z > 0 then
-                    local cx = (ts.X + bs.X)*0.5
-                    local tY, bY = math.min(ts.Y, bs.Y), math.max(ts.Y, bs.Y)
-                    local h = bY - tY
-                    if h >= 8 and cx > -100 and cx < cam.ViewportSize.X + 100 and bY > -100 and tY < cam.ViewportSize.Y + 100 then
-                        local w = math.clamp(h * ((t.width or 0.6)/(t.height or 1.8)), 10, 220)
-                        local e = espElements[t.id] or makeEspElement(t.id)
-                        local dummy = m:GetAttribute("Dummy") == true
-                        local hp = tonumber(m:GetAttribute("Health")) or 0
-                        local mhp = tonumber(m:GetAttribute("MaxHealth")) or 20
-                        local disp = m:GetAttribute("DisplayName") or m.Name
-                        local dist = eye and math.floor((t.feet - eye).Magnitude + 0.5) or 0
-                        local hf = mhp > 0 and math.clamp(hp/mhp,0,1) or 0
-                        e.stroke.Color = dummy and Color3.fromRGB(255,180,80) or Color3.fromRGB(255,80,80)
-                        e.box.Position = UDim2.fromOffset(math.floor(cx - w*0.5), math.floor(tY))
-                        e.box.Size = UDim2.fromOffset(math.floor(w), math.floor(h))
-                        e.box.Visible = true
-                        e.name.Text = string.format("%s  %d/%d  %dm", tostring(disp), hp, mhp, dist)
-                        e.name.Position = UDim2.fromOffset(math.floor(cx-110), math.floor(tY-16))
-                        e.name.Size = UDim2.fromOffset(220, 14); e.name.Visible = true
-                        e.healthBg.Position = UDim2.fromOffset(math.floor(cx - w*0.5 - 7), math.floor(tY))
-                        e.healthBg.Size = UDim2.fromOffset(3, math.floor(h)); e.healthBg.Visible = true
-                        e.healthFill.Size = UDim2.new(1,0,hf,0)
-                        e.healthFill.BackgroundColor3 = hf > 0.6 and Color3.fromRGB(80,220,100) or (hf > 0.3 and Color3.fromRGB(235,200,70) or Color3.fromRGB(235,70,70))
-                        e.healthFill.Visible = true; seen[t.id] = true
-                    end
-                end
-            end
-        end
-    end
-    for id, e in pairs(espElements) do if not seen[id] then hideEsp(e) end end
-end
-
-local function doKillaura()
-    if not CFG.killaura or Controller.locked or pearlBusy or windBusy then return end
-    if workspace:GetAttribute("JugHold") == true then return end
-    local c = plr.Character; if not c or c:GetAttribute("Alive") ~= true then return end
-    local okM, mode = pcall(Hands.gamemode); if okM and mode == "spectator" then return end
-    local okS, str = pcall(Hands.strength); if not okS or str < 0.95 then return end
-    if not canCrit() then return end
-    local now = os.clock(); if now - lastAttack < 0.05 then return end
-    local t, eye = bestTarget(); if not t then return end
-    local aim = t.feet + Vector3.new(0, (t.height or 1.8)*0.6, 0) - eye
-    if aim.Magnitude < 0.0001 then return end
-    local st = snapshot(aim.Unit); if not st then return end
-    if pcall(Net.send, { a = "attack", target = t.id, st = st }) then
-        Hands.attackReset = Controller.tickCount; Hands.swing = os.clock(); lastAttack = now
-    end
-end
-
-local function doKillauraV2()
-    if not CFG.killauraV2 or Controller.locked or pearlBusy or windBusy then return end
-    if workspace:GetAttribute("JugHold") == true then return end
-    local c = plr.Character; if not c or c:GetAttribute("Alive") ~= true then return end
-    local okM, mode = pcall(Hands.gamemode); if okM and mode == "spectator" then return end
-    local okS, str = pcall(Hands.strength); if not okS or str < 0.95 then return end
-    if not canCrit() then return end
-    local inv = Hands.inv; local wid = nil
-    if inv and inv.hotbar and inv.selected then wid = inv.hotbar[inv.selected] and inv.hotbar[inv.selected].id end
-    if wid and wid ~= MACE_ID then local ok,cd = pcall(Hands.cooldownFraction, wid); if ok and cd > 0 then return end end
-    local now = os.clock(); if now - lastV2Attack < 0.3 then return end
-    local t, eye = bestTarget(); if not t then return end
-    local aim = t.feet + Vector3.new(0, (t.height or 1.8)*0.6, 0) - eye
-    if aim.Magnitude < 0.0001 then return end
-    local st = snapshot(aim.Unit); if not st then return end
-    if pcall(Net.send, { a = "attack", target = t.id, st = st }) then
-        Hands.attackReset = Controller.tickCount; Hands.swing = os.clock(); lastV2Attack = now
-    end
-end
-
-local function hotbarSlot(id)
-    local inv = Hands.inv; if not inv or not inv.hotbar then return nil end
-    for s = 1, 9 do local it = inv.hotbar[s]; if it and it.id == id then return s end end
-    return nil
-end
-
-local function ensureTotem()
-    if not CFG.autoTotem or totemBusy or pearlBusy then return end
-    local inv = Hands.inv; if not inv then return end
-    local off = inv.offhand; local offId = type(off) == "table" and off.id or nil
-    if offId == TOTEM_ID then return end
-    local offEmpty = off == nil or offId == nil
-    local hp = plr:GetAttribute("Health") or 20
-    if not offEmpty and hp > CFG.totemHealth then return end
-    if offEmpty and inv.cursor and inv.cursor.id == TOTEM_ID then
-        Net.send({ a = "inv", op = "click", slot = 10, right = false, shift = false }); return
-    end
-    if inv.cursor then return end
-    local slot = hotbarSlot(TOTEM_ID)
-    if slot then
-        if inv.selected ~= slot then pcall(Hands.select, slot); return end
-        if Hands.stopUsing then pcall(Hands.stopUsing, false) end
-        local cur = inv.hotbar[inv.selected]
-        inv.hotbar[inv.selected] = inv.offhand
-        inv.offhand = cur
-        pcall(Net.send, { a = "swap" }); Hands.attackReset = Controller.tickCount
-        return
-    end
-    local inv2 = inv.inventory; if not inv2 then return end
-    local mx = 0; for k in pairs(inv2) do if type(k) == "number" and k > mx then mx = k end end
-    for i = 1, mx do
-        local it = inv2[i]
-        if it and it.id == TOTEM_ID then
-            totemBusy = true
-            task.spawn(function()
-                pcall(function()
-                    Net.send({ a = "inv", op = "click", slot = i + 10, right = false, shift = false })
-                    task.wait(0.08)
-                    local cur = Hands.inv.cursor
-                    if not cur or cur.id ~= TOTEM_ID then return end
-                    Net.send({ a = "inv", op = "click", slot = 10, right = false, shift = false })
-                    task.wait(0.08)
-                    if Hands.inv.cursor then Net.send({ a = "inv", op = "click", slot = i + 10, right = false, shift = false }) end
-                end)
-                totemBusy = false
-            end)
-            return
-        end
-    end
-end
-
-pearlCatch = function()
-    if pearlBusy or destroyed then return false end
-    if Controller.locked or workspace:GetAttribute("JugHold") == true then return false end
-    local c = plr.Character; if not c or c:GetAttribute("Alive") ~= true then return false end
-    local okM, mode = pcall(Hands.gamemode); if okM and mode == "spectator" then return false end
-    local ps = hotbarSlot(PEARL_ID); local ws = hotbarSlot(WIND_ID)
-    if not ps or not ws then status.Text = "Pearl: missing item"; return false end
-    local okP, pcd = pcall(Hands.cooldownFraction, PEARL_ID)
-    local okW, wcd = pcall(Hands.cooldownFraction, WIND_ID)
-    if (okP and pcd > 0) or (okW and wcd > 0) then status.Text = "Pearl: cooldown"; return false end
-    local inv = Hands.inv; if not inv or not inv.selected then return false end
-    local orig = inv.selected; local look = Vector3.new(0, 1, 0)
-    pearlBusy = true; pearlTrack = nil; pearlCapture = nil
-    Hands.cooldowns = Hands.cooldowns or {}
-    pcall(Hands.select, ps)
-    if not pcall(Net.send, { a = "use", hand = "main", look = look, item = PEARL_ID }) then
-        pearlBusy = false; return false
-    end
-    Hands.cooldowns[PEARL_ID] = { start = os.clock(), ticks = 20 }
-    task.spawn(function()
-        pcall(function()
-            local delay = math.clamp(CFG.pearlDelay or 0.25, 0.05, 1)
-            local st = os.clock()
-            while os.clock() - st < delay do task.wait(0.01) end
-            local wl = look; local pid = pearlCapture or (pearlTrack and pearlTrack.pid)
-            local pos = pearlModelPos(pid); local eye = Controller.eye()
-            if pos and eye then local d = pos - eye*3; if d.Magnitude > 0.0001 then wl = d.Unit end
-            elseif pearlTrack and eye then local d = pearlTrack.pos - eye*3; if d.Magnitude > 0.0001 then wl = d.Unit end end
-            pcall(Hands.select, ws)
-            pcall(Net.send, { a = "use", hand = "main", look = wl, item = WIND_ID, predictWind = false })
-            Hands.cooldowns[WIND_ID] = { start = os.clock(), ticks = 10 }
-            task.wait(0.05)
-            if orig then pcall(Hands.select, orig) end
-        end)
-        pearlBusy = false
-    end)
-    return true
-end
-
-windLaunch = function()
-    if windBusy or destroyed or pearlBusy then return false end
-    if Controller.locked or workspace:GetAttribute("JugHold") == true then return false end
-    local c = plr.Character; if not c or c:GetAttribute("Alive") ~= true then return false end
-    local okM, mode = pcall(Hands.gamemode); if okM and mode == "spectator" then return false end
-    local ws = hotbarSlot(WIND_ID); if not ws then status.Text = "Wind: missing"; return false end
-    local okCd, cd = pcall(Hands.cooldownFraction, WIND_ID); if okCd and cd > 0 then status.Text = "Wind: cooldown"; return false end
-    local inv = Hands.inv; if not inv or not inv.selected then return false end
-    local orig = inv.selected; windBusy = true; Hands.cooldowns = Hands.cooldowns or {}
-    pcall(Hands.select, ws)
-    if not pcall(Net.send, { a = "use", hand = "main", look = Vector3.new(0,-1,0), item = WIND_ID, predictWind = false }) then
-        windBusy = false; return false
-    end
-    Hands.cooldowns[WIND_ID] = { start = os.clock(), ticks = 10 }
-    task.spawn(function()
-        task.wait(0.08); if orig then pcall(Hands.select, orig) end; windBusy = false
-    end)
-    return true
-end
-
-autoMace = function()
-    if not CFG.autoMace then return end
-    if destroyed or pearlBusy or windBusy then return end
-    if Controller.locked or workspace:GetAttribute("JugHold") == true then return end
-    local c = plr.Character; if not c or c:GetAttribute("Alive") ~= true then return end
-    local okM, mode = pcall(Hands.gamemode); if okM and mode == "spectator" then return end
-    local s = Controller.state; if not s then return end
-    local inv = Hands.inv; if not inv or not inv.selected then return end
-    local onG = s.onGround == true; local fall = s.fallDistance or 0
-    if onG and maceHasThrown and os.clock() - maceThrowTime > 1.5 then maceHasThrown = false end
-    local t, eye = bestTarget(CFG.maceRange or CFG.range); if not t then return end
-    if not onG then
-        local ms = hotbarSlot(MACE_ID); if not ms then return end
-        if inv.selected ~= ms then pcall(Hands.select, ms); return end
-        if fall < 0.3 then return end
-        local now = os.clock(); if now - lastMaceAttack < 0.3 then return end
-        local aim = t.feet + Vector3.new(0, (t.height or 1.8)*0.6, 0) - eye
-        if aim.Magnitude < 0.0001 then return end
-        local st = snapshot(aim.Unit); if not st then return end
-        pcall(Net.send, { a = "attack", target = t.id, st = st })
-        Hands.attackReset = Controller.tickCount; Hands.swing = os.clock(); lastMaceAttack = now
-        return
-    end
-    if maceHasThrown then return end
-    local ws = hotbarSlot(WIND_ID); if not ws then status.Text = "Mace: need wind"; return end
-    local okCd, cd = pcall(Hands.cooldownFraction, WIND_ID); if okCd and cd > 0 then return end
-    if inv.selected ~= ws then pcall(Hands.select, ws); return end
-    Hands.cooldowns = Hands.cooldowns or {}
-    pcall(Net.send, { a = "use", hand = "main", look = Vector3.new(0,-1,0), item = WIND_ID, predictWind = false })
-    Hands.cooldowns[WIND_ID] = { start = os.clock(), ticks = 10 }
-    maceHasThrown = true; maceThrowTime = os.clock()
-end
-
-autoFarm = function()
-    if not CFG.autoFarm then return end
-    if destroyed or Controller.locked or workspace:GetAttribute("JugHold") == true then return end
-    local c = plr.Character; if not c or c:GetAttribute("Alive") ~= true then return end
-    local okM, mode = pcall(Hands.gamemode); if okM and mode == "spectator" then return end
-    local s = Controller.state; if not s then return end
-    local inv = Hands.inv; if not inv or not inv.selected then return end
-    local now = os.clock()
-    local t, dist = nearestTarget(CFG.farmRange or 30)
-    if not t then farmState = "idle"; return end
-    if farmState == "idle" then farmState = "walking"; farmStepStart = now end
-    if farmState == "walking" then
-        if dist and dist > 5 then moveToward(t.feet); return end
-        local ps = hotbarSlot(PEARL_ID); if not ps then status.Text = "Farm: no pearl"; return end
-        local okP, pcd = pcall(Hands.cooldownFraction, PEARL_ID); if okP and pcd > 0 then return end
-        Hands.cooldowns = Hands.cooldowns or {}
-        pcall(Hands.select, ps)
-        pcall(Net.send, { a = "use", hand = "main", look = Vector3.new(0,1,0), item = PEARL_ID })
-        Hands.cooldowns[PEARL_ID] = { start = now, ticks = 20 }
-        farmState = "pearlThrown"; farmStepStart = now
-        return
-    end
-    if farmState == "pearlThrown" then
-        if now - farmStepStart >= 0.5 then
-            local ws = hotbarSlot(WIND_ID); if not ws then farmState = "idle"; return end
-            local okW, wcd = pcall(Hands.cooldownFraction, WIND_ID); if okW and wcd > 0 then return end
-            Hands.cooldowns = Hands.cooldowns or {}
-            pcall(Hands.select, ws)
-            pcall(Net.send, { a = "use", hand = "main", look = Vector3.new(0,-1,0), item = WIND_ID, predictWind = false })
-            Hands.cooldowns[WIND_ID] = { start = now, ticks = 10 }
-            farmState = "attacking"; farmStepStart = now
-        end
-        return
-    end
-    if farmState == "attacking" then
-        local ms = hotbarSlot(MACE_ID); if not ms then farmState = "idle"; return end
-        if inv.selected ~= ms then pcall(Hands.select, ms); return end
-        if now - lastFarmAttack >= 0.5 then
-            local tg, eye = bestTarget(CFG.range)
-            if tg and eye then
-                local aim = tg.feet + Vector3.new(0, (tg.height or 1.8)*0.6, 0) - eye
-                if aim.Magnitude > 0.0001 then
-                    local st = snapshot(aim.Unit)
-                    if st then
-                        pcall(Net.send, { a = "attack", target = tg.id, st = st })
-                        Hands.attackReset = Controller.tickCount; Hands.swing = now; lastFarmAttack = now
-                    end
-                end
-            end
-        end
-        if s.onGround and now - farmStepStart > 1.2 then farmState = "walking"; farmStepStart = now end
-    end
-end
-
--- ================= FLOAT DRAG =================
-local function setupFloatDrag(button, onClick, flashColor, baseColor)
-    local dragging, moved, dragInput, dragStart, startPos = false, false, nil, nil, nil
-    button.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true; moved = false; dragInput = input
-            dragStart = input.Position
-            startPos = UDim2.fromOffset(button.AbsolutePosition.X, button.AbsolutePosition.Y)
-        end
-    end)
-    UIS.InputChanged:Connect(function(input)
-        if not dragging or input ~= dragInput then return end
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            local d = input.Position - dragStart
-            if d.Magnitude > 6 then moved = true end
-            if CFG.pearlLock then return end
-            local cam = workspace.CurrentCamera
-            local vp = cam and cam.ViewportSize or Vector2.new(1280,720)
-            local w, h = button.AbsoluteSize.X, button.AbsoluteSize.Y
-            button.Position = UDim2.fromOffset(
-                math.clamp(startPos.X.Offset + d.X, 0, math.max(0, vp.X - w)),
-                math.clamp(startPos.Y.Offset + d.Y, 0, math.max(0, vp.Y - h))
-            )
-        end
-    end)
-    UIS.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            if dragging and input == dragInput and not moved then
-                if onClick() and flashColor then
-                    button.BackgroundColor3 = flashColor
-                    task.delay(0.15, function() if button.Parent then button.BackgroundColor3 = baseColor end end)
-                end
-            end
-            dragging = false; dragInput = nil
-        end
-    end)
-end
-
-setupFloatDrag(pearlButton, pearlCatch, Color3.fromRGB(70,150,96), Color3.fromRGB(42,112,74))
-setupFloatDrag(windButton, windLaunch, Color3.fromRGB(80,130,200), Color3.fromRGB(46,74,132))
-setupFloatDrag(maceButton, function()
-    if CFG.autoMace then
-        CFG.autoMace = false
-        if maceOriginalSlot then pcall(Hands.select, maceOriginalSlot); maceOriginalSlot = nil end
-        maceHasThrown = false
-    else
-        maceOriginalSlot = Hands.inv and Hands.inv.selected
-        CFG.autoMace = true
-        maceHasThrown = false
-    end
-    refresh(); return false
-end, nil, Color3.fromRGB(140,78,46))
-
--- ================= STATUS UPDATE =================
-local function updateStatus()
-    local hp = plr:GetAttribute("Health")
-    local off = Hands.inv and Hands.inv.offhand
-    local offT = off and off.id or "empty"
-    local cnt = 0
-    local ok, ts = pcall(World.targets); if ok and type(ts) == "table" then cnt = #ts end
-    local critT = not CFG.critOnly and "off" or (canCrit() and "CRIT" or "wait")
-    local mode = ""
-    if CFG.autoFarm then mode = "  FARM:"..farmState
-    elseif CFG.autoMace then mode = maceHasThrown and "  MACE:UP" or "  MACE:RDY" end
-    status.Text = string.format("HP %s | Off %s | T: %d | %s%s",
-        hp and tostring(hp) or "?", offT, cnt, critT, mode)
-end
-
--- ================= LOOP =================
-track(RunService.Heartbeat:Connect(function(dt)
-    if destroyed then return end
-    if Controller.state then
-        ensureTotem()
-        if CFG.autoFarm then autoFarm()
-        elseif CFG.autoMace then autoMace()
-        elseif CFG.killauraV2 then doKillauraV2()
-        elseif CFG.killaura then doKillaura() end
-        updateCameraTarget()
-    end
-    lastStatus = lastStatus + dt
-    if lastStatus >= 0.2 then lastStatus = 0; updateStatus() end
-end))
-
-RunService:BindToRenderStep(CAMERA_BIND, Enum.RenderPriority.Camera.Value - 1, aimCamera)
-RunService:BindToRenderStep(ESP_BIND, Enum.RenderPriority.Camera.Value + 2, updateEsp)
-
--- ================= INPUT =================
-track(UIS.InputBegan:Connect(function(input, gp)
-    if destroyed or gp then return end
-    if UIS:GetFocusedTextBox() then return end
-    if input.KeyCode == Enum.KeyCode.RightShift then frame.Visible = not frame.Visible
-    elseif input.KeyCode == Enum.KeyCode.K then CFG.killaura = not CFG.killaura; refresh()
-    elseif input.KeyCode == Enum.KeyCode.T then CFG.autoTotem = not CFG.autoTotem; refresh()
-    elseif input.KeyCode == Enum.KeyCode.P then CFG.esp = not CFG.esp; refresh()
-    elseif input.KeyCode == Enum.KeyCode.C then CFG.critOnly = not CFG.critOnly; refresh()
-    elseif input.KeyCode == Enum.KeyCode.G then pearlCatch() end
-end))
-
--- Panel drag
 local dragging, dragStart, startPos = false, nil, nil
-track(headerDrag.InputBegan:Connect(function(input)
+dragHeader.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true; dragStart = input.Position; startPos = frame.Position
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
     end
-end))
-track(UIS.InputChanged:Connect(function(input)
+end)
+UIS.InputChanged:Connect(function(input)
     if not dragging then return end
-    if CFG.panelLock then return end
     if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
         local d = input.Position - dragStart
         frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
     end
-end))
-track(UIS.InputEnded:Connect(function(input)
+end)
+UIS.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = false
     end
-end))
+end)
 
--- ================= DESTROY / API =================
-local function destroy()
-    if destroyed then return end
-    destroyed = true
-    for _, c in ipairs(connections) do pcall(function() c:Disconnect() end) end
-    pcall(function() RunService:UnbindFromRenderStep(CAMERA_BIND) end)
-    pcall(function() RunService:UnbindFromRenderStep(ESP_BIND) end)
-    pcall(function() espGui:Destroy() end)
-    pcall(function() pearlGui:Destroy() end)
-    pcall(function() gui:Destroy() end)
-    if env.UNSTABLE_SMP_CFG == CFG then env.UNSTABLE_SMP_CFG = nil end
-    if env.UNSTABLE_SMP and env.UNSTABLE_SMP.destroy == destroy then env.UNSTABLE_SMP = nil end
-end
+-- زر Run Unstablesmp → يظهر Soon
+runBtn.MouseButton1Click:Connect(function()
+    soonLabel.Text = "Soon..."
+    task.delay(2, function()
+        if soonLabel and soonLabel.Parent then
+            soonLabel.Text = ""
+        end
+    end)
+end)
 
-env.UNSTABLE_SMP = {
-    cfg = CFG, pearlCatch = pearlCatch, windLaunch = windLaunch,
-    autoMace = autoMace, autoFarm = autoFarm, refresh = refresh, destroy = destroy
+-- ============ BETA SCRIPT ============
+local betaGui, betaConnections = nil, {}
+local betaActive = false
+local lastAttack = 0
+
+betaBtn.MouseButton1Click:Connect(function()
+    -- احذف واجهة الـ Hub
+    hubGui:Destroy()
+
+    -- جيب الموديولات
+    local MC = plr.PlayerScripts:WaitForChild("MC", 10)
+    if not MC then return end
+    local okN, Net = pcall(require, MC:WaitForChild("Net")); if not okN then return end
+    local okH, Hands = pcall(require, MC:WaitForChild("Hands")); if not okH then return end
+    local okC, Controller = pcall(require, MC:WaitForChild("Controller")); if not okC then return end
+    local okW, World = pcall(require, MC:WaitForChild("World")); if not okW then return end
+
+    -- واجهة الزر العائم
+    betaGui = Instance.new("ScreenGui")
+    betaGui.Name = "UNSTABLE_SMP_BETA"
+    betaGui.ResetOnSpawn = false
+    betaGui.IgnoreGuiInset = true
+    betaGui.DisplayOrder = 1000000
+    betaGui.Parent = playerGui
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.fromOffset(70, 70)
+    btn.Position = UDim2.new(1, -90, 0.5, -35)
+    btn.BackgroundColor3 = Color3.fromRGB(239, 68, 68)
+    btn.Text = "KA\nOFF"
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 13
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.AutoButtonColor = false
+    btn.Active = true
+    btn.Parent = betaGui
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 12)
+    local bstroke = Instance.new("UIStroke")
+    bstroke.Color = Color3.fromRGB(255, 140, 140)
+    bstroke.Thickness = 2
+    bstroke.Parent = btn
+
+    -- دعم السحب + التمييز بين الضغط والسحب
+    local bDragging, bMoved, bDragStart, bStartPos = false, false, nil, nil
+    table.insert(betaConnections, btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            bDragging = true
+            bMoved = false
+            bDragStart = input.Position
+            bStartPos = btn.Position
+        end
+    end))
+    table.insert(betaConnections, UIS.InputChanged:Connect(function(input)
+        if not bDragging then return end
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            local d = input.Position - bDragStart
+            if d.Magnitude > 6 then bMoved = true end
+            btn.Position = UDim2.new(bStartPos.X.Scale, bStartPos.X.Offset + d.X, bStartPos.Y.Scale, bStartPos.Y.Offset + d.Y)
+        end
+    end))
+    table.insert(betaConnections, UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if bDragging and not bMoved then
+                -- toggle
+                betaActive = not betaActive
+                if betaActive then
+                    btn.Text = "KA\nON"
+                    btn.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
+                    bstroke.Color = Color3.fromRGB(140, 255, 160)
+                else
+                    btn.Text = "KA\nOFF"
+                    btn.BackgroundColor3 = Color3.fromRGB(239, 68, 68)
+                    bstroke.Color = Color3.fromRGB(255, 140, 140)
+                end
+            end
+            bDragging = false
+        end
+    end))
+
+    -- Crit only دائماً مفعّل
+    local function canCrit()
+        local s = Controller.state
+        if not s then return false end
+        if (s.fallDistance or 0) <= 0 then return false end
+        if s.onGround or s.inWater or s.sprinting or s.gliding or s.flying then return false end
+        return true
+    end
+
+    local function snapshot(look)
+        local s = Controller.state
+        if not s or not s.pos then return nil end
+        return {
+            fall = s.fallDistance or 0, ground = s.onGround == true,
+            sprint = s.sprinting == true, water = s.inWater == true,
+            gliding = s.gliding == true, vel = s.vel or Vector3.new(),
+            look = look, swap = false, pos = s.pos, predicted = true
+        }
+    end
+
+    -- Killaura كل ثانية
+    table.insert(betaConnections, RunService.Heartbeat:Connect(function()
+        if not betaActive then return end
+        if Controller.locked or workspace:GetAttribute("JugHold") == true then return end
+
+        local c = plr.Character
+        if not c or c:GetAttribute("Alive") ~= true then return end
+        local okM, mode = pcall(Hands.gamemode); if okM and mode == "spectator" then return end
+        local okS, str = pcall(Hands.strength); if not okS or str < 0.95 then return end
+
+        -- Crit only دائماً
+        if not canCrit() then return end
+
+        -- كل ثانية
+        local now = os.clock()
+        if now - lastAttack < 1 then return end
+
+        local eye = Controller.eye()
+        if not eye then return end
+        local ok, targets = pcall(World.targets)
+        if not ok or type(targets) ~= "table" then return end
+
+        local best, bd
+        for _, t in ipairs(targets) do
+            local ctr = t.feet + Vector3.new(0, (t.height or 1.8) * 0.5, 0)
+            local d = (ctr - eye).Magnitude
+            if d <= 4 and (not bd or d < bd) then best, bd = t, d end
+        end
+        if not best then return end
+
+        local aim = best.feet + Vector3.new(0, (best.height or 1.8) * 0.6, 0) - eye
+        if aim.Magnitude < 0.0001 then return end
+        local st = snapshot(aim.Unit)
+        if not st then return end
+
+        if pcall(Net.send, { a = "attack", target = best.id, st = st }) then
+            Hands.attackReset = Controller.tickCount
+            Hands.swing = now
+            lastAttack = now
+        end
+    end))
+end)
+
+-- ============ API ============
+env.UNSTABLE_SMP_HUB = {
+    destroy = function()
+        for _, c in ipairs(betaConnections) do pcall(function() c:Disconnect() end) end
+        betaConnections = {}
+        if hubGui then pcall(function() hubGui:Destroy() end) end
+        if betaGui then pcall(function() betaGui:Destroy() end) end
+    end
 }
-
-updateStatus()
-notify("Unstable SMP loaded", T.success, 2)
